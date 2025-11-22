@@ -1,0 +1,226 @@
+Simple Restaurant Management System (RMS)
+
+This project, the Simple Restaurant Management System, was developed in Python. The goal was to create a basic command-line application that a small café or restaurant could use to manage their menu and calculate customer bills, including tax.
+
+import json
+import os
+from datetime import datetime
+
+MENU_FILE = "menu.json"
+ORDER_LOG_FILE = "orders_log_v2.txt"
+TAX_RATE = 0.05
+
+Class: MenuItem
+Represents a single item on the menu.
+class MenuItem:
+    def __init__(self, item_id, name, price):
+        self.item_id = str(item_id)
+        self.name = name
+        self.price = float(price)
+
+    def __str__(self):
+        return f"[{self.item_id:>3}] | {self.name:<15} | Rs {self.price:>6.2f}"
+
+Class: Order
+Manages items added to a single customer's bill.
+class Order:
+    def __init__(self):
+        self.items = {}
+
+    def add_item(self, item_id, quantity):
+        item_id = str(item_id)
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                raise ValueError("Quantity must be positive.")
+        except:
+            print("Invalid quantity. Please enter a number.")
+            return False
+
+        if item_id in self.items:
+            self.items[item_id] += quantity
+        else:
+            self.items[item_id] = quantity
+        return True
+
+Class: Restaurant
+Manages menu & orders.class Restaurant:
+    def __init__(self):
+        self.menu_dict = {}
+        self.current_order = None
+        self.load_menu()
+        self.ensure_order_log_file()
+
+Initializes default menu if JSON is missing:
+    def _initialize_default_menu(self):
+        default_data = [
+            { "name": "Burger Deluxe", "price": 230 },
+            { "name": "Pizza Margherita", "price": 350 },
+            { "name": "Cold Coffee", "price": 95 },
+            { "name": "Pasta", "price": 160 },
+        ]
+
+Loads menu from JSON or initializes:
+    def load_menu(self):
+        if os.path.exists(MENU_FILE):
+            try:
+                with open(MENU_FILE, 'r') as f:
+                    data = json.load(f)
+                for item_id, item in data.items():
+                    self.menu_dict[item_id] = MenuItem(item_id, item['name'], item['price'])
+            except:
+                print(f"Error loading {MENU_FILE}. Resetting menu.")
+                self._initialize_default_menu()
+        else:
+            print(f"{MENU_FILE} not found, using default menu.")
+            self._initialize_default_menu()
+
+Save menu:
+    def save_menu(self):
+        serializable_data = {
+            item_id: {"name": item.name, "price": item.price}
+            for item_id, item in self.menu_dict.items()
+        }
+        with open(MENU_FILE, 'w') as f:
+            json.dump(serializable_data, f, indent=4)
+
+Ensure order log file:
+    def ensure_order_log_file(self):
+        if not os.path.exists(ORDER_LOG_FILE):
+            with open(ORDER_LOG_FILE, 'w') as f:
+                f.write("=== Restaurant Order Log ===\n")
+
+Display menu:
+    def display_menu(self):
+        print("\n===== MENU =====\n")
+        print(f"{'ID':<5} | {'Item Name':<15} | Price (Rs)")
+        print("-" * 35)
+        for item_id in sorted(self.menu_dict.keys(), key=lambda x: int(x)):
+            print(self.menu_dict[item_id])
+
+Start order:
+    def start_order(self):
+        self.current_order = Order()
+        print("\nNew Order Started.\n")
+
+Add item to order:
+    def add_item_to_order(self, item_id, quantity):
+        if item_id not in self.menu_dict:
+            print("Item ID not found.")
+            return
+        if self.current_order:
+            if self.current_order.add_item(item_id, quantity):
+                print(f"Added {quantity}x {self.menu_dict[item_id].name}")
+        else:
+            print("No active order.")
+
+Finalize bill:
+    def finalize_bill(self):
+        if not self.current_order or not self.current_order.items:
+            print("Cannot finalize empty order.")
+            return
+
+        summary = self.current_order.get_order_summary(self.menu_dict)
+        print("\n=== Final Bill ===\n")
+        print(f"{'ID':<5} | {'Item Name':<15} | Qty | Unit Rs | Line Total")
+
+        for d in summary['details']:
+            print(f"{d['item_id']:<5} | {d['name']:<15} | {d['quantity']:^3} | "
+                  f"{d['unit_price']:^7} | {d['line_total']:^10}")
+
+        print("\nSubtotal: Rs", summary["subtotal"])
+        print("Tax (5%): Rs", summary["tax"])
+        print("Grand Total: Rs", summary["total"])
+
+        self.log_transaction(summary)
+        self.current_order = None
+        print("\nOrder finalized and logged.")
+
+Log transaction:
+    def log_transaction(self, summary):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = f"{timestamp} | Total: Rs {summary['total']}\n"
+        with open(ORDER_LOG_FILE, "a") as f:
+            f.write(entry)
+
+Main CLI
+def run_cli():
+    restaurant = Restaurant()
+
+    while True:
+        print("\n===== RESTAURANT MANAGEMENT SYSTEM =====")
+        print("1. View Menu")
+        print("2. Start New Order")
+        print("3. Add Item to Order")
+        print("4. Calculate and Finalize Bill")
+        print("5. Exit")
+
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            restaurant.display_menu()
+        elif choice == '2':
+            restaurant.start_order()
+        elif choice == '3':
+            item_id = input("Enter Item ID: ")
+            quantity = input("Enter quantity: ")
+            restaurant.add_item_to_order(item_id, quantity)
+        elif choice == '4':
+            restaurant.finalize_bill()
+        elif choice == '5':
+            print("Goodbye!")
+            break
+        else:
+            print("Invalid choice.")
+
+
+if __name__ == "__main__":
+    run_cli()
+
+
+
+UML 
+@startuml
+title Simple Restaurant Management System (RMS) - Class Diagram
+
+class MenuItem {
+  - item_id : str
+  - name : str
+  - price : float
+  --
+  + __init__(item_id, name, price)
+  + __str__() : str
+}
+
+class Order {
+  - items : dict<str, int>
+  --
+  + __init__()
+  + add_item(item_id : str, quantity : int) : bool
+  + get_order_summary(menu_dict : dict<str, MenuItem>) : dict
+}
+
+class Restaurant {
+  - menu_dict : dict<str, MenuItem>
+  - current_order : Order
+  --
+  + __init__()
+  - _initialize_default_menu() : None
+  + load_menu() : None
+  + save_menu() : None
+  + ensure_order_log_file() : None
+  + display_menu() : None
+  + start_order() : None
+  + add_item_to_order(item_id : str, quantity : int) : None
+  + finalize_bill() : None
+  + log_transaction(summary : dict) : None
+}
+
+' Relationships
+Restaurant "1" *-- "*" MenuItem : manages >
+Restaurant "0..1" o-- Order : current_order
+Order --> MenuItem : uses for\nsummary & pricing
+
+@enduml
+
+
